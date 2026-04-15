@@ -70,10 +70,6 @@ When to use it:
 - You want quick what-if testing without editing notebook cells.
 - You want a simple user-facing interface.
 
-### `requirements.txt`
-
-Runtime dependency list for both the notebook logic and Streamlit app.
-
 ### `synthetic_manpower_data.csv`
 
 Generated synthetic dataset from the notebook run.
@@ -86,16 +82,13 @@ Typical columns include:
 - wage cost,
 - expected idle time and idle variance.
 
-### `s00170-012-4159-3.pdf`
-
-Reference reading and modeling context used to ground formulation choices.
-
 ## Setup instructions (Windows, PowerShell)
 
 From the project root:
 
 ```powershell
-git clone 
+git clone https://github.com/kmzpatil/Manpower_optimisation_in_Manufacturing_using_Multi-Objective_Optimization
+cd Manpower_optimisation_in_Manufacturing_using_Multi-Objective_Optimization
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
@@ -125,21 +118,6 @@ Expected outputs:
 - runtime chart,
 - first-10 allocation comparison chart.
 
-## Feasibility rules and common pitfalls
-
-The per-unit manpower bounds are `[2, 12]`. For `N` units, feasible total manpower `X` must satisfy:
-
-```text
-2N <= X <= 12N
-```
-
-Examples:
-
-- If `N = 300`, valid `X` range is `600` to `3600`.
-- If `N = 500`, valid `X` range is `1000` to `6000`.
-
-If `X` is outside the feasible range, optimization is rejected by validation logic.
-
 ## Reading benchmark results correctly
 
 When comparing CCGC and CCCP, focus on two dimensions:
@@ -165,24 +143,6 @@ A common outcome is that both models produce near-identical allocations while on
 - Keep weights (`w1`, `w2`, `w3`) unchanged between runs intended for comparison.
 - Avoid mixing outputs from different dataset generations in the same analysis table.
 
-## Troubleshooting
-
-### Streamlit command not found
-
-Use:
-
-```powershell
-python -m streamlit run optimization_web_app.py
-```
-
 ### Solver appears slow at larger sizes
 
 This is expected as dimensionality and active constraints increase. Compare both models under the same inputs before drawing conclusions.
-
-### Notebook kernel mismatch
-
-Make sure the notebook kernel points to the `.venv` interpreter used to install dependencies.
-
-## License and usage
-
-This repository is intended for benchmarking, research, and educational use. Adapt parameter ranges and constraint structures to fit your operational assumptions before using results for production planning.
