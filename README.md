@@ -84,7 +84,6 @@ Typical columns include:
 
 ## Setup instructions (Windows, PowerShell)
 
-From the project root:
 
 ```powershell
 git clone https://github.com/kmzpatil/Manpower_optimisation_in_Manufacturing_using_Multi-Objective_Optimization
