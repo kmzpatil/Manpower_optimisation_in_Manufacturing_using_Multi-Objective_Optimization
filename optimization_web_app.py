@@ -2,6 +2,7 @@ import time
 from dataclasses import dataclass
 
 import numpy as np
+import pandas as pd
 import streamlit as st
 from scipy.optimize import minimize
 from scipy.stats import norm
@@ -82,6 +83,7 @@ def normalize_weights(w1: float, w2: float, w3: float) -> tuple[float, float, fl
     return w1 / weight_sum, w2 / weight_sum, w3 / weight_sum
 
 
+@st.cache_data(show_spinner="Building simulation context...")
 def build_context(n: int, x_total: int, seed: int, z_value: float, w1: float, w2: float, w3: float) -> OptimizationContext:
     if z_value < 0:
         raise ValueError("Z must be non-negative.")
@@ -136,37 +138,26 @@ def build_context(n: int, x_total: int, seed: int, z_value: float, w1: float, w2
     return temp_ctx
 
 
+@st.cache_data(show_spinner="Computing manual utopia values...")
 def build_context_manual(
     x_total: int,
     z_value: float,
     w1: float,
     w2: float,
     w3: float,
-    lower_bounds: np.ndarray,
-    upper_bounds: np.ndarray,
-    expected_output: np.ndarray,
-    output_variance: np.ndarray,
-    wage_costs: np.ndarray,
-    expected_idle_time: np.ndarray,
-    idle_variance: np.ndarray,
+    manual_data_df: pd.DataFrame,
 ) -> OptimizationContext:
+    lower_bounds = manual_data_df["Min Workers"].values
+    upper_bounds = manual_data_df["Max Workers"].values
+    expected_output = manual_data_df["Exp Output"].values
+    output_variance = manual_data_df["Output Var"].values
+    wage_costs = manual_data_df["Wage Cost"].values
+    expected_idle_time = manual_data_df["Exp Idle"].values
+    idle_variance = manual_data_df["Idle Var"].values
     if z_value < 0:
         raise ValueError("Z must be non-negative.")
 
     w1, w2, w3 = normalize_weights(w1, w2, w3)
-
-    arrays = [
-        lower_bounds,
-        upper_bounds,
-        expected_output,
-        output_variance,
-        wage_costs,
-        expected_idle_time,
-        idle_variance,
-    ]
-    lengths = {arr.shape[0] for arr in arrays}
-    if len(lengths) != 1:
-        raise ValueError("All unit-level input arrays must have the same length.")
 
     n = int(lower_bounds.shape[0])
     if n <= 0:
@@ -323,6 +314,7 @@ def evaluate_solution(ctx: OptimizationContext, x_values: np.ndarray):
     return float(f1), float(f2), float(f3)
 
 
+@st.cache_data(show_spinner="Executing solver logic...")
 def run_model(ctx: OptimizationContext, model_name: str) -> ModelResult:
     start_time = time.perf_counter()
 
@@ -359,16 +351,74 @@ def main():
     st.markdown(
         """
         <style>
-        .app-note {
-            border: 1px solid #d7e6ff;
-            border-radius: 10px;
-            padding: 0.8rem 1rem;
-            margin-bottom: 0.8rem;
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&display=swap');
+        
+        html, body, [class*="css"] {
+            font-family: 'Outfit', sans-serif;
         }
+
+        .app-note {
+            background: rgba(30, 41, 59, 0.05);
+            border-left: 4px solid #3b82f6;
+            border-radius: 12px;
+            padding: 1.25rem;
+            margin-bottom: 2rem;
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            backdrop-filter: blur(10px);
+            color: #1e293b;
+        }
+        
+        [data-theme="dark"] .app-note {
+            background: rgba(255, 255, 255, 0.05);
+            color: #f8fafc;
+        }
+
         .section-title {
+            font-size: 1.5rem;
             font-weight: 700;
-            margin-top: 0.4rem;
-            margin-bottom: 0.4rem;
+            letter-spacing: -0.02em;
+            color: #3b82f6;
+            margin-top: 1.5rem;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            text-transform: uppercase;
+            font-size: 0.9rem;
+            letter-spacing: 0.1em;
+        }
+
+        .section-title::before {
+            content: "";
+            width: 3px;
+            height: 16px;
+            background: #3b82f6;
+            border-radius: 2px;
+        }
+
+        .stButton>button {
+            width: 100%;
+            background: linear-gradient(90deg, #3b82f6 0%, #2563eb 100%) !important;
+            color: white !important;
+            border: none !important;
+            border-radius: 12px !important;
+            padding: 0.75rem 2rem !important;
+            font-weight: 600 !important;
+            transition: all 0.4s ease !important;
+            box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.3) !important;
+        }
+
+        .stButton>button:hover {
+            transform: translateY(-3px) !important;
+            box-shadow: 0 20px 25px -5px rgba(59, 130, 246, 0.4) !important;
+            background: linear-gradient(90deg, #2563eb 0%, #1d4ed8 100%) !important;
+        }
+
+        [data-testid="stMetricValue"] {
+            background: linear-gradient(90deg, #3b82f6, #06b6d4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 800;
         }
         </style>
         """,
@@ -418,13 +468,7 @@ def main():
 
         st.caption(f"Weight sum (raw): {raw_weight_sum:.4f} (normalized automatically at run time)")
 
-        manual_lower_bounds = None
-        manual_upper_bounds = None
-        manual_expected_output = None
-        manual_output_variance = None
-        manual_wage_costs = None
-        manual_expected_idle_time = None
-        manual_idle_variance = None
+        manual_data_df = None
 
         if input_mode == "Synthetic Benchmark":
             st.markdown("**System Constraints**")
@@ -438,88 +482,46 @@ def main():
             x_total = int(st.number_input("Total Manpower", min_value=1, step=1, value=30))
             seed = 0
 
-            st.caption("Fill all unit-level deterministic and stochastic values below.")
-            st.caption("Default values are prefilled from your sample 5-unit case.")
-
-            default_rows = [
-                {"lb": 3.0, "ub": 9.0, "wage": 20.0, "out": 8.0, "out_var": 0.000125, "idle": 40.0, "idle_var": 0.00016},
-                {"lb": 3.0, "ub": 9.0, "wage": 15.0, "out": 6.0, "out_var": 0.000324, "idle": 60.0, "idle_var": 0.00021},
-                {"lb": 4.0, "ub": 9.0, "wage": 17.0, "out": 10.0, "out_var": 0.000469, "idle": 35.0, "idle_var": 0.00013},
-                {"lb": 2.0, "ub": 9.0, "wage": 12.0, "out": 6.0, "out_var": 0.000521, "idle": 50.0, "idle_var": 0.00022},
-                {"lb": 3.0, "ub": 9.0, "wage": 18.0, "out": 10.0, "out_var": 0.000324, "idle": 45.0, "idle_var": 0.00019},
+            st.caption("Edit the table below to adjust unit parameters. Changes are reactive.")
+            
+            # Default data for the table
+            default_data = [
+                {"Min Workers": 3.0, "Max Workers": 9.0, "Wage Cost": 20.0, "Exp Output": 8.0, "Output Var": 0.000125, "Exp Idle": 40.0, "Idle Var": 0.00016},
+                {"Min Workers": 3.0, "Max Workers": 9.0, "Wage Cost": 15.0, "Exp Output": 6.0, "Output Var": 0.000324, "Exp Idle": 60.0, "Idle Var": 0.00021},
+                {"Min Workers": 4.0, "Max Workers": 9.0, "Wage Cost": 17.0, "Exp Output": 10.0, "Output Var": 0.000469, "Exp Idle": 35.0, "Idle Var": 0.00013},
+                {"Min Workers": 2.0, "Max Workers": 9.0, "Wage Cost": 12.0, "Exp Output": 6.0, "Output Var": 0.000521, "Exp Idle": 50.0, "Idle Var": 0.00022},
+                {"Min Workers": 3.0, "Max Workers": 9.0, "Wage Cost": 18.0, "Exp Output": 10.0, "Output Var": 0.000324, "Exp Idle": 45.0, "Idle Var": 0.00019},
             ]
+            
+            # Ensure we have N rows
+            if len(default_data) < n:
+                for i in range(len(default_data), n):
+                    default_data.append({
+                        "Min Workers": 2.0, "Max Workers": 12.0, "Wage Cost": 15.0, 
+                        "Exp Output": 8.0, "Output Var": 0.0002, "Exp Idle": 40.0, "Idle Var": 0.0002
+                    })
+            elif len(default_data) > n:
+                default_data = default_data[:n]
 
-            header_cols = st.columns([0.8, 1, 1, 1, 1, 1, 1, 1])
-            header_cols[0].markdown("**Unit**")
-            header_cols[1].markdown("**Min**")
-            header_cols[2].markdown("**Max**")
-            header_cols[3].markdown("**Wage**")
-            header_cols[4].markdown("**Exp Output**")
-            header_cols[5].markdown("**Output Var**")
-            header_cols[6].markdown("**Exp Idle**")
-            header_cols[7].markdown("**Idle Var**")
-
-            lb_list: list[float] = []
-            ub_list: list[float] = []
-            wage_list: list[float] = []
-            out_list: list[float] = []
-            out_var_list: list[float] = []
-            idle_list: list[float] = []
-            idle_var_list: list[float] = []
-
-            for i in range(n):
-                row_default = default_rows[i] if i < len(default_rows) else {
-                    "lb": 2.0,
-                    "ub": 12.0,
-                    "wage": 15.0,
-                    "out": 8.0,
-                    "out_var": 0.0002,
-                    "idle": 40.0,
-                    "idle_var": 0.0002,
+            df_input = pd.DataFrame(default_data)
+            edited_df = st.data_editor(
+                df_input,
+                num_rows="fixed",
+                use_container_width=True,
+                column_config={
+                    "Min Workers": st.column_config.NumberColumn("Min workers", help="Minimum required workers for this unit", format="%.1f", min_value=0.0),
+                    "Max Workers": st.column_config.NumberColumn("Max workers", help="Maximum allowable workers for this unit", format="%.1f", min_value=0.0),
+                    "Wage Cost": st.column_config.NumberColumn("Wage ($)", help="Cost per worker", format="$ %.1f", min_value=0.0),
+                    "Exp Output": st.column_config.NumberColumn("Exp. Output", help="Expected production output", format="%.1f"),
+                    "Output Var": st.column_config.NumberColumn("Output Var.", help="Variance in production output", format="%.6f"),
+                    "Exp Idle": st.column_config.NumberColumn("Exp. Idle", help="Expected idle time", format="%.1f"),
+                    "Idle Var": st.column_config.NumberColumn("Idle Var.", help="Variance in idle time", format="%.6f"),
                 }
+            )
 
-                cols = st.columns([0.8, 1, 1, 1, 1, 1, 1, 1])
-                cols[0].write(f"U{i + 1}")
-                lb_list.append(float(cols[1].number_input("", min_value=0.0, value=row_default["lb"], step=1.0, key=f"lb_{i}")))
-                ub_list.append(float(cols[2].number_input("", min_value=0.0, value=row_default["ub"], step=1.0, key=f"ub_{i}")))
-                wage_list.append(float(cols[3].number_input("", min_value=0.0, value=row_default["wage"], step=1.0, key=f"wage_{i}")))
-                out_list.append(float(cols[4].number_input("", min_value=0.0, value=row_default["out"], step=1.0, key=f"out_{i}")))
-                out_var_list.append(
-                    float(
-                        cols[5].number_input(
-                            "",
-                            min_value=0.0,
-                            value=row_default["out_var"],
-                            step=0.000001,
-                            format="%.6f",
-                            key=f"out_var_{i}",
-                        )
-                    )
-                )
-                idle_list.append(float(cols[6].number_input("", min_value=0.0, value=row_default["idle"], step=1.0, key=f"idle_{i}")))
-                idle_var_list.append(
-                    float(
-                        cols[7].number_input(
-                            "",
-                            min_value=0.0,
-                            value=row_default["idle_var"],
-                            step=0.000001,
-                            format="%.6f",
-                            key=f"idle_var_{i}",
-                        )
-                    )
-                )
-
-            manual_lower_bounds = np.array(lb_list, dtype=float)
-            manual_upper_bounds = np.array(ub_list, dtype=float)
-            manual_wage_costs = np.array(wage_list, dtype=float)
-            manual_expected_output = np.array(out_list, dtype=float)
-            manual_output_variance = np.array(out_var_list, dtype=float)
-            manual_expected_idle_time = np.array(idle_list, dtype=float)
-            manual_idle_variance = np.array(idle_var_list, dtype=float)
-
+            manual_data_df = edited_df
             st.caption(
-                f"Manual feasibility range from bounds: {manual_lower_bounds.sum():.0f} to {manual_upper_bounds.sum():.0f}"
+                f"Manual feasibility range from bounds: {edited_df['Min Workers'].sum():.0f} to {edited_df['Max Workers'].sum():.0f}"
             )
 
         st.divider()
@@ -530,64 +532,43 @@ def main():
         st.caption("Results appear below after optimization finishes.")
         if run_clicked:
             try:
-                progress = st.progress(0)
-                status = st.empty()
-
-                status.info("Preparing optimization context...")
-                progress.progress(20)
-
-                with st.spinner("Running optimization... please wait"):
-                    if input_mode == "Synthetic Benchmark":
-                        ctx = build_context(n=n, x_total=x_total, seed=seed, z_value=z_value, w1=w1, w2=w2, w3=w3)
-                    else:
-                        ctx = build_context_manual(
-                            x_total=x_total,
-                            z_value=z_value,
-                            w1=w1,
-                            w2=w2,
-                            w3=w3,
-                            lower_bounds=manual_lower_bounds,
-                            upper_bounds=manual_upper_bounds,
-                            expected_output=manual_expected_output,
-                            output_variance=manual_output_variance,
-                            wage_costs=manual_wage_costs,
-                            expected_idle_time=manual_expected_idle_time,
-                            idle_variance=manual_idle_variance,
-                        )
-
-                    progress.progress(45)
-                    status.info("Solving selected optimization model(s)...")
-
-                    st.markdown(
-                        f"**Using normalized weights:** w1={ctx.w1:.4f}, w2={ctx.w2:.4f}, w3={ctx.w3:.4f} | **Z={ctx.z_value:.3f}**"
+                if input_mode == "Synthetic Benchmark":
+                    ctx = build_context(n=n, x_total=x_total, seed=seed, z_value=z_value, w1=w1, w2=w2, w3=w3)
+                else:
+                    ctx = build_context_manual(
+                        x_total=x_total,
+                        z_value=z_value,
+                        w1=w1,
+                        w2=w2,
+                        w3=w3,
+                        manual_data_df=manual_data_df,
                     )
 
-                    if model == "Both":
-                        ccgc_result = run_model(ctx, "CCGC")
-                        cccp_result = run_model(ctx, "CCCP")
-                        results = [ccgc_result, cccp_result]
-                        allocation_delta = float(np.max(np.abs(ccgc_result.allocations - cccp_result.allocations)))
-                    else:
-                        results = [run_model(ctx, model)]
-                        allocation_delta = None
+                st.markdown(
+                    f"**Using normalized weights:** w1={ctx.w1:.4f}, w2={ctx.w2:.4f}, w3={ctx.w3:.4f} | **Z={ctx.z_value:.3f}**"
+                )
 
-                    progress.progress(80)
-                    status.info("Formatting results...")
+                if model == "Both":
+                    ccgc_result = run_model(ctx, "CCGC")
+                    cccp_result = run_model(ctx, "CCCP")
+                    results = [ccgc_result, cccp_result]
+                    allocation_delta = float(np.max(np.abs(ccgc_result.allocations - cccp_result.allocations)))
+                else:
+                    results = [run_model(ctx, model)]
+                    allocation_delta = None
 
-                    rows = [
-                        {
-                            "Model": r.model,
-                            "Time (s)": f"{r.time_seconds:.6f}",
-                            "Iterations": r.iterations,
-                            "f1": f"{r.f1:.6f}",
-                            "f2": f"{r.f2:.6f}",
-                            "f3": f"{r.f3:.6f}",
-                        }
-                        for r in results
-                    ]
+                rows = [
+                    {
+                        "Model": r.model,
+                        "Time (s)": f"{r.time_seconds:.6f}",
+                        "Iterations": r.iterations,
+                        "f1": f"{r.f1:.6f}",
+                        "f2": f"{r.f2:.6f}",
+                        "f3": f"{r.f3:.6f}",
+                    }
+                    for r in results
+                ]
 
-                progress.progress(100)
-                status.success("Optimization completed successfully.")
                 st.success("Optimization completed successfully.")
 
                 st.subheader("Optimization Summary")
