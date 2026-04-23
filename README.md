@@ -10,6 +10,40 @@ In short, this repository helps answer a useful question:
 
 "When the problem gets larger and more constrained, do CCGC and CCCP still produce near-identical manpower plans, and what is the runtime cost of each formulation?"
 
+## Setup instructions (Windows, PowerShell)
+
+```powershell
+git clone https://github.com/kmzpatil/Manpower_optimisation_in_Manufacturing_using_Multi-Objective_Optimization
+cd Manpower_optimisation_in_Manufacturing_using_Multi-Objective_Optimization
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+streamlit run optimization_web_app.py
+```
+
+Expected behavior:
+
+- Streamlit serves locally (typically `http://localhost:8501`).
+- You select model and input parameters.
+- Clicking **Run Optimization** executes the selected formulation(s).
+- Results table and allocation snippets are displayed in-page.
+
+## Run the notebook benchmark
+
+1. Open the notebook in VS Code or Jupyter.
+2. Select the project virtual environment kernel.
+3. Run cells top to bottom.
+
+Expected outputs:
+
+- synthetic dataset summary,
+- CSV export path,
+- utopia values,
+- CCGC/CCCP benchmark comparison table,
+- runtime chart,
+- first-10 allocation comparison chart.
+
 ## Why synthetic data is the right choice here
 
 For benchmarking optimization formulations, synthetic data is an advantage, not a limitation.
@@ -81,41 +115,6 @@ Typical columns include:
 - expected output and output variance,
 - wage cost,
 - expected idle time and idle variance.
-
-## Setup instructions (Windows, PowerShell)
-
-
-```powershell
-git clone https://github.com/kmzpatil/Manpower_optimisation_in_Manufacturing_using_Multi-Objective_Optimization
-cd Manpower_optimisation_in_Manufacturing_using_Multi-Objective_Optimization
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-pip install -r requirements.txt
-streamlit run optimization_web_app.py
-```
-
-Expected behavior:
-
-- Streamlit serves locally (typically `http://localhost:8501`).
-- You select model and input parameters.
-- Clicking **Run Optimization** executes the selected formulation(s).
-- Results table and allocation snippets are displayed in-page.
-
-## Run the notebook benchmark
-
-1. Open the notebook in VS Code or Jupyter.
-2. Select the project virtual environment kernel.
-3. Run cells top to bottom.
-
-Expected outputs:
-
-- synthetic dataset summary,
-- CSV export path,
-- utopia values,
-- CCGC/CCCP benchmark comparison table,
-- runtime chart,
-- first-10 allocation comparison chart.
 
 ## Reading benchmark results correctly
 
